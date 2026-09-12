@@ -33,6 +33,7 @@ Docs:
 from __future__ import annotations
 
 import httpx
+from tenacity import retry, retry_if_exception_type, stop_after_attempt
 
 from de_pipeline import config
 
@@ -99,6 +100,20 @@ def build_client(
     )
 
 
+def _wait_for_rate_limit(retry_state) -> float:
+    """Honor a RateLimitError's Retry-After; otherwise back off exponentially."""
+    exc = retry_state.outcome.exception()
+    if isinstance(exc, RateLimitError) and exc.retry_after is not None:
+        return exc.retry_after
+    return min(2 ** (retry_state.attempt_number - 1), 30)
+
+
+@retry(
+    retry=retry_if_exception_type((RateLimitError, httpx.TransportError)),
+    stop=stop_after_attempt(MAX_ATTEMPTS),
+    wait=_wait_for_rate_limit,
+    reraise=True,
+)
 def fetch_page(page: int = 1, *, client: httpx.Client | None = None) -> dict:
     """Fetch one page of characters and return the parsed JSON dict.
 
@@ -118,7 +133,19 @@ def fetch_page(page: int = 1, *, client: httpx.Client | None = None) -> dict:
     Tip: a custom ``wait`` callable receives the retry state, so
     it can pull ``retry_after`` off the raised ``RateLimitError``.
     """
-    raise NotImplementedError("Day 1: GET one page; Day 2: add 429 retry/backoff")
+    owns_client = client is None
+    client = client or build_client()
+    try:
+        response = client.get("/character", params={"page": page})
+        if response.status_code == 429:
+            retry_after_header = response.headers.get("Retry-After")
+            retry_after = float(retry_after_header) if retry_after_header is not None else None
+            raise RateLimitError(retry_after=retry_after)
+        response.raise_for_status()
+        return response.json()
+    finally:
+        if owns_client:
+            client.close()
 
 
 # --------------------------------------------------------------------------- #
