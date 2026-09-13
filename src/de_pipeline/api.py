@@ -85,6 +85,8 @@ def build_client(
     your client with a fake transport instead of the network.
     """
     settings = config.get_settings()
+
+    # Make paramaters default to config but remain flexible for testing
     base_url = base_url if base_url is not None else settings.api_base_url
     token = token if token is not None else settings.api_token
 
@@ -93,6 +95,7 @@ def build_client(
         "Accept": "application/json",
     }
     if token:
+        # Add standard syntax, "bearer <token>" that most REST APIs fall on (skipped on normal runs)
         headers["Authorization"] = f"Bearer {token}"
 
     return httpx.Client(
