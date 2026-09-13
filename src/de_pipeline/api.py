@@ -215,6 +215,7 @@ def land_to_s3(records: list[dict], *, s3_client=None, key: str | None = None) -
     s3_client.put_object(Bucket=settings.bucket, Key=key, Body=body)
     return len(records)
 
+#test
 
 def ingest(*, client: httpx.Client | None = None, s3_client=None) -> int:
     """The capstone: fetch all characters from the API and land them raw in S3.
