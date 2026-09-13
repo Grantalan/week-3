@@ -32,7 +32,10 @@ Docs:
 
 from __future__ import annotations
 
+import json
+
 import httpx
+from botocore.exceptions import ClientError
 from tenacity import retry, retry_if_exception_type, stop_after_attempt
 
 from de_pipeline import config
@@ -162,7 +165,21 @@ def fetch_all_characters(*, client: httpx.Client | None = None) -> list[dict]:
     across pages (pass it into ``fetch_page``) so you're not paying connection
     setup on every request. Close clients you create; leave supplied clients open.
     """
-    raise NotImplementedError("Day 2: paginate until info.next is null")
+    owns_client = client is None
+    client = client or build_client()
+    try:
+        characters: list[dict] = []
+        page = 1
+        while True:
+            data = fetch_page(page, client=client)
+            characters.extend(data["results"])
+            if data["info"]["next"] is None:
+                break
+            page += 1
+        return characters
+    finally:
+        if owns_client:
+            client.close()
 
 
 # --------------------------------------------------------------------------- #
@@ -185,7 +202,18 @@ def land_to_s3(records: list[dict], *, s3_client=None, key: str | None = None) -
 
     Land it RAW — don't clean or reshape here; that's transform.py's job.
     """
-    raise NotImplementedError("Day 1/2: put the raw JSON array to S3")
+    settings = config.get_settings()
+    s3_client = s3_client or config.get_s3_client()
+    key = key if key is not None else settings.characters_key
+
+    try:
+        s3_client.head_bucket(Bucket=settings.bucket)
+    except ClientError:
+        s3_client.create_bucket(Bucket=settings.bucket)
+
+    body = json.dumps(records).encode("utf-8")
+    s3_client.put_object(Bucket=settings.bucket, Key=key, Body=body)
+    return len(records)
 
 
 def ingest(*, client: httpx.Client | None = None, s3_client=None) -> int:
