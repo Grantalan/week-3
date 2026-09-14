@@ -192,6 +192,15 @@ Working isn't the same as *shippable*. Today you put on the code-reviewer hat.
    ```
 4. **Review the result.** Run `uv run python -m de_pipeline.explore` and
    explain two lint fixes and why raw records land before transformation.
+
+> One explicit error was in an if statement wrapping another where there needed to be a simple and condition added.
+>
+> Most of the corrections were dead code that was not being used in a function or was unnecessary.
+>
+> Because we use __future__ annotations, a lot of the imports in explore.py were not necessary.
+>
+> The reason we land raw before transforming to preserve an un-edited history of information.
+
 5. **Final checkpoint** — whole suite green and the linter clean:
    ```bash
    uv run pytest
