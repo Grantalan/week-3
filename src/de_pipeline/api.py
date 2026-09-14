@@ -85,6 +85,8 @@ def build_client(
     your client with a fake transport instead of the network.
     """
     settings = config.get_settings()
+
+    # Make paramaters default to config but remain flexible for testing
     base_url = base_url if base_url is not None else settings.api_base_url
     token = token if token is not None else settings.api_token
 
@@ -93,6 +95,7 @@ def build_client(
         "Accept": "application/json",
     }
     if token:
+        # Add standard syntax, "bearer <token>" that most REST APIs fall on (skipped on normal runs)
         headers["Authorization"] = f"Bearer {token}"
 
     return httpx.Client(
@@ -104,7 +107,8 @@ def build_client(
 
 
 def _wait_for_rate_limit(retry_state) -> float:
-    """Honor a RateLimitError's Retry-After; otherwise back off exponentially."""
+    """Honor a RateLimitError's Retry-After; otherwise back off exponentially.
+    This callable wait function is used in the retry decorator below"""
     exc = retry_state.outcome.exception()
     if isinstance(exc, RateLimitError) and exc.retry_after is not None:
         return exc.retry_after
@@ -136,7 +140,7 @@ def fetch_page(page: int = 1, *, client: httpx.Client | None = None) -> dict:
     Tip: a custom ``wait`` callable receives the retry state, so
     it can pull ``retry_after`` off the raised ``RateLimitError``.
     """
-    owns_client = client is None
+    created_client = client is None
     client = client or build_client()
     try:
         response = client.get("/character", params={"page": page})
@@ -147,7 +151,7 @@ def fetch_page(page: int = 1, *, client: httpx.Client | None = None) -> dict:
         response.raise_for_status()
         return response.json()
     finally:
-        if owns_client:
+        if created_client:
             client.close()
 
 
@@ -165,7 +169,7 @@ def fetch_all_characters(*, client: httpx.Client | None = None) -> list[dict]:
     across pages (pass it into ``fetch_page``) so you're not paying connection
     setup on every request. Close clients you create; leave supplied clients open.
     """
-    owns_client = client is None
+    created_client = client is None
     client = client or build_client()
     try:
         characters: list[dict] = []
@@ -178,7 +182,7 @@ def fetch_all_characters(*, client: httpx.Client | None = None) -> list[dict]:
             page += 1
         return characters
     finally:
-        if owns_client:
+        if created_client:
             client.close()
 
 
@@ -214,8 +218,6 @@ def land_to_s3(records: list[dict], *, s3_client=None, key: str | None = None) -
     body = json.dumps(records).encode("utf-8")
     s3_client.put_object(Bucket=settings.bucket, Key=key, Body=body)
     return len(records)
-
-#test
 
 def ingest(*, client: httpx.Client | None = None, s3_client=None) -> int:
     """The capstone: fetch all characters from the API and land them raw in S3.
