@@ -14,12 +14,24 @@ from __future__ import annotations
 
 # The stages you'll orchestrate. `api` is the new one you wrote this week; the
 # rest are provided (carried from Weeks 1-2).
-from de_pipeline import api, fetch, load, transform  # noqa: F401
+from de_pipeline import api, fetch, load, transform
 
 
 def main() -> None:
     """Run the full pipeline end to end and print a summary."""
-    raise NotImplementedError("Day 3: orchestrate ingest -> fetch -> load -> transform")
+    landed = api.ingest()
+    fetch.fetch_all()
+
+    con = load.connect()
+    try:
+        load_counts = load.load_all(con)
+        transform_counts = transform.run_transforms(con)
+    finally:
+        con.close()
+
+    print(f"Landed {landed} characters")
+    print(f"Loaded: {load_counts}")
+    print(f"Transformed: {transform_counts}")
 
 
 if __name__ == "__main__":
